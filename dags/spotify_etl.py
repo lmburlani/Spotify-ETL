@@ -8,43 +8,42 @@ import datetime
 import sqlite3
 
 
-# Generate your token here:  https://developer.spotify.com/console/get-recently-played/
-# Note: You need a Spotify account (can be easily created for free)
+DATABASE_LOCATION = "sqlite:///my_played_tracks.sqlite"
+USER_ID = "" # seu usuário do Spotify 
+TOKEN = "" # Spotify API token
+
+# Link para gerar tokein:  https://developer.spotify.com/console/get-recently-played/
 
 def check_if_valid_data(df: pd.DataFrame) -> bool:
-    # Check if dataframe is empty
+    # Verifica se o dataframe está vazio
     if df.empty:
-        print("No songs downloaded. Finishing execution")
+        print("Nenhuma música baixada. Encerrando execução")
         return False 
 
-    # Primary Key Check
+    # Verificação da key primária
     if pd.Series(df['played_at']).is_unique:
         pass
     else:
-        raise Exception("Primary Key check is violated")
+        raise Exception("A verificação da key primária foi violada")
 
-    # Check for nulls
+    # Verificação de dados nulos
     if df.isnull().values.any():
-        raise Exception("Null values found")
+        raise Exception("Valores nulos encontrados")
 
-    # Check that all timestamps are of yesterday's date
+    # Verifique se as  datas/horas são da data de ontem
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     yesterday = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
 
     timestamps = df["timestamp"].tolist()
     for timestamp in timestamps:
         if datetime.datetime.strptime(timestamp, '%Y-%m-%d') != yesterday:
-            raise Exception("At least one of the returned songs does not have a yesterday's timestamp")
+            raise Exception("Pelo menos uma das músicas devolvidas não tem data/hora de ontem")
 
     return True
 
+if __name__ == "__main__":
 
-def run_spotify_etl():
-    DATABASE_LOCATION = "sqlite:///my_played_tracks.sqlite"
-    USER_ID = ''
-    TOKEN = ''
-
-      # Extract part of the ETL process
+    # Extração
  
     headers = {
         "Accept" : "application/json",
@@ -52,12 +51,13 @@ def run_spotify_etl():
         "Authorization" : "Bearer {token}".format(token=TOKEN)
     }
     
-    # Convert time to Unix timestamp in miliseconds      
+    # Converte hora para Unix timestamp em milissegundos
+      
     today = datetime.datetime.now()
     yesterday = today - datetime.timedelta(days=1)
     yesterday_unix_timestamp = int(yesterday.timestamp()) * 1000
 
-    # Download all songs you've listened to "after yesterday", which means in the last 24 hours      
+    # Baixe todas as músicas que você ouviu "depois de ontem"     
     r = requests.get("https://api.spotify.com/v1/me/player/recently-played?after={time}".format(time=yesterday_unix_timestamp), headers = headers)
 
     data = r.json()
@@ -67,14 +67,14 @@ def run_spotify_etl():
     played_at_list = []
     timestamps = []
 
-    # Extracting only the relevant bits of data from the json object      
+    # Extraindo apenas os bits de dados relevantes do JSON     
     for song in data["items"]:
         song_names.append(song["track"]["name"])
         artist_names.append(song["track"]["album"]["artists"][0]["name"])
         played_at_list.append(song["played_at"])
         timestamps.append(song["played_at"][0:10])
         
-    # Prepare a dictionary in order to turn it into a pandas dataframe below       
+    # Prepare um dicionário para transformá-lo em um DataFrame abaixo       
     song_dict = {
         "song_name" : song_names,
         "artist_name": artist_names,
@@ -84,11 +84,11 @@ def run_spotify_etl():
 
     song_df = pd.DataFrame(song_dict, columns = ["song_name", "artist_name", "played_at", "timestamp"])
     
-    # Validate
+    # Validação
     if check_if_valid_data(song_df):
         print("Data valid, proceed to Load stage")
 
-    # Load
+    # Carregamento
 
     engine = sqlalchemy.create_engine(DATABASE_LOCATION)
     conn = sqlite3.connect('my_played_tracks.sqlite')
